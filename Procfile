@@ -1,1 +1,1 @@
-web: gunicorn guide_tube.wsgi
+web: gunicorn config.wsgi

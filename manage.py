@@ -6,7 +6,14 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'guide_tube.settings')
+    # Apply IPv6 bypass patch to fix ISP WinError 10060 connection timeout issues
+    try:
+        from backend.utils.network import patch_ipv6_bypass
+        patch_ipv6_bypass()
+    except Exception as e:
+        print(f"Warning: Could not apply IPv6 patch: {e}")
+
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
