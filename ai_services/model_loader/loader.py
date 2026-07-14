@@ -1,5 +1,4 @@
 import threading
-from sentence_transformers import SentenceTransformer
 
 _model_lock = threading.Lock()
 _embedding_model = None
@@ -10,6 +9,8 @@ def get_embedding_model(model_name='paraphrase-multilingual-MiniLM-L12-v2'):
     if _embedding_model is None:
         with _model_lock:
             if _embedding_model is None:
+                # Lazy import to prevent heavy PyTorch loading at startup
+                from sentence_transformers import SentenceTransformer
                 print(f"📥 Loading embedding model: {model_name} (first time only)...")
                 try:
                     # Attempt to load the multilingual model
