@@ -1,14 +1,18 @@
-import nltk
-import textstat
-from nltk.tokenize import word_tokenize, sent_tokenize
-from nltk.corpus import stopwords
 import re
 from collections import Counter
 
 class TranscriptAnalyzer:
     def __init__(self):
-        self.stop_words = set(stopwords.words('english'))
+        self._stop_words = None
         self.technical_terms = self.load_technical_terms()
+
+    @property
+    def stop_words(self):
+        if self._stop_words is None:
+            # Lazy import to prevent heavy NLTK loading on startup
+            from nltk.corpus import stopwords
+            self._stop_words = set(stopwords.words('english'))
+        return self._stop_words
     
     def load_technical_terms(self):
         # Basic programming terms - we can expand this later
@@ -57,6 +61,8 @@ class TranscriptAnalyzer:
             return 0
         
         try:
+            # Lazy import to prevent textstat loading on startup
+            import textstat
             # Flesch Reading Ease: Higher = easier to read
             flesch_score = textstat.flesch_reading_ease(text)
             
@@ -94,6 +100,8 @@ class TranscriptAnalyzer:
     
     def analyze_jargon(self, text):
         """Analyze technical jargon density"""
+        # Lazy import to prevent heavy NLTK loading on startup
+        from nltk.tokenize import word_tokenize
         words = word_tokenize(text.lower())
         
         # Remove punctuation and stop words
@@ -300,6 +308,8 @@ class TopicDetector:
     
     def _extract_key_terms(self, text, n=10):
         """Extract most frequent and meaningful terms"""
+        # Lazy import to prevent heavy NLTK loading on startup
+        from nltk.tokenize import word_tokenize
         # Tokenize and clean
         words = word_tokenize(text)
         words = [word.lower() for word in words if word.isalnum() and len(word) > 2]
