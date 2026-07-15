@@ -48,14 +48,21 @@ class RAGService:
         self.model_loaded = True
     
     def _get_groq_key(self):
-        """Get Groq API key from .env"""
+        """Get Groq API key from system environment or .env file"""
+        # 1. Check system environment (for production/Render)
+        groq_key = os.environ.get('GROQ_API_KEY')
+        if groq_key:
+            return groq_key.strip().strip('"\'')
+            
+        # 2. Check local .env file (for local development)
         try:
-            with open('.env', 'r') as f:
-                for line in f:
-                    if 'GROQ_API_KEY' in line:
-                        return line.split('=')[1].strip().strip('"\'')
+            if os.path.exists('.env'):
+                with open('.env', 'r') as f:
+                    for line in f:
+                        if 'GROQ_API_KEY' in line:
+                            return line.split('=')[1].strip().strip('"\'')
         except Exception as e:
-            print(f"⚠️ Error reading .env: {e}")
+            print(f"⚠️ Error reading GROQ_API_KEY: {e}")
         return None
     
     def process_transcript(self, transcript_text: str, video_id: str, video_duration_minutes=60):

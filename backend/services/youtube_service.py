@@ -8,12 +8,19 @@ from backend.utils.error_handler import ErrorHandler
 class YouTubeService:
     @staticmethod
     def get_api_key():
-        """Get YouTube API key from .env"""
+        """Get YouTube API key from system environment or .env file"""
+        # 1. Check system environment (for production/Render)
+        api_key = os.environ.get('YOUTUBE_API_KEY')
+        if api_key:
+            return api_key.strip().strip('"\'')
+            
+        # 2. Check local .env file (for local development)
         try:
-            with open('.env', 'r') as f:
-                for line in f:
-                    if 'YOUTUBE_API_KEY' in line:
-                        return line.split('=')[1].strip().strip('"\'')
+            if os.path.exists('.env'):
+                with open('.env', 'r') as f:
+                    for line in f:
+                        if 'YOUTUBE_API_KEY' in line:
+                            return line.split('=')[1].strip().strip('"\'')
         except Exception as e:
             ErrorHandler.log_error(e, "Reading YouTube API Key")
         return None
