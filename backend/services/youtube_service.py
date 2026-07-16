@@ -76,19 +76,27 @@ class YouTubeService:
     @staticmethod
     def fetch_transcript(video_id):
         """Fetch transcript list data and raw transcript text"""
-        api = YouTubeTranscriptApi()
-        
         # Support cookies.txt to bypass YouTube datacenter bot detection on Render
         cookies_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'cookies.txt')
+        
         if os.path.exists(cookies_path):
-            print("🍪 Using cookies.txt to bypass YouTube datacenter block...")
+            print("🍪 Loading cookies.txt to bypass YouTube datacenter block...")
+            import requests
+            import http.cookiejar
             try:
-                transcript_list = api.list(video_id, cookies=cookies_path)
+                session = requests.Session()
+                cookie_jar = http.cookiejar.MozillaCookieJar(cookies_path)
+                cookie_jar.load(ignore_discard=True, ignore_expires=True)
+                session.cookies = cookie_jar
+                api = YouTubeTranscriptApi(http_client=session)
+                print("🍪 Cookies successfully loaded into session.")
             except Exception as e:
-                print(f"⚠️ Error using cookies: {e}. Falling back to default list...")
-                transcript_list = api.list(video_id)
+                print(f"⚠️ Error loading cookies: {e}. Falling back to default client...")
+                api = YouTubeTranscriptApi()
         else:
-            transcript_list = api.list(video_id)
+            api = YouTubeTranscriptApi()
+            
+        transcript_list = api.list(video_id)
         
         # Try English first, then Hindi, then any available transcript
         try:
