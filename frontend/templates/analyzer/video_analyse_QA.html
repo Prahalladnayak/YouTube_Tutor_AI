@@ -1016,9 +1016,14 @@
                     <div style="color: #ffc107; font-weight: 600; margin-bottom: 12px;">
                         <i class="bi bi-exclamation-circle"></i> Transcript Not Available
                     </div>
-                    <p style="color: var(--text-main);">
+                    <p style="color: var(--text-main); margin-bottom: 8px;">
                         This video doesn't have captions available. Analysis is based on video metadata only.
                     </p>
+                    {% if video_info.transcript_error %}
+                    <div style="color: #ff6b6b; font-size: 0.85rem; font-family: monospace; background: rgba(255, 107, 107, 0.1); padding: 8px; border-radius: 4px; margin-top: 8px;">
+                        <strong>Debug Info:</strong> {{ video_info.transcript_error }}
+                    </div>
+                    {% endif %}
                 </div>
                 {% endif %}
 
