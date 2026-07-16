@@ -78,40 +78,51 @@ class YouTubeService:
         """Fetch transcript list data and raw transcript text"""
         # Support cookies.txt to bypass YouTube datacenter bot detection on Render
         cookies_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'cookies.txt')
+        cookies_status = "No cookies.txt found"
         
         if os.path.exists(cookies_path):
-            print("🍪 Loading cookies.txt to bypass YouTube datacenter block...")
+            cookies_status = "cookies.txt found"
             import requests
             import http.cookiejar
             try:
                 session = requests.Session()
+                # Set realistic browser headers to bypass bot-detection
+                session.headers.update({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Referer': 'https://www.google.com/'
+                })
                 cookie_jar = http.cookiejar.MozillaCookieJar(cookies_path)
                 cookie_jar.load(ignore_discard=True, ignore_expires=True)
                 session.cookies = cookie_jar
                 api = YouTubeTranscriptApi(http_client=session)
-                print("🍪 Cookies successfully loaded into session.")
+                cookies_status = "cookies.txt loaded successfully"
             except Exception as e:
-                print(f"⚠️ Error loading cookies: {e}. Falling back to default client...")
+                cookies_status = f"Failed to load cookies: {str(e)}"
                 api = YouTubeTranscriptApi()
         else:
             api = YouTubeTranscriptApi()
             
-        transcript_list = api.list(video_id)
-        
-        # Try English first, then Hindi, then any available transcript
         try:
-            transcript_obj = transcript_list.find_transcript(['en'])
-        except Exception:
+            transcript_list = api.list(video_id)
+            
+            # Try English first, then Hindi, then any available transcript
             try:
-                transcript_obj = transcript_list.find_transcript(['hi'])
+                transcript_obj = transcript_list.find_transcript(['en'])
             except Exception:
-                transcript_obj = (
-                    transcript_list._manually_created_transcripts[0]
-                    if transcript_list._manually_created_transcripts
-                    else transcript_list._generated_transcripts[0]
-                )
-        
-        transcript_data = list(transcript_obj.fetch())
-        transcript_text = ' '.join([snippet.text for snippet in transcript_data])
-        
-        return transcript_data, transcript_text
+                try:
+                    transcript_obj = transcript_list.find_transcript(['hi'])
+                except Exception:
+                    transcript_obj = (
+                        transcript_list._manually_created_transcripts[0]
+                        if transcript_list._manually_created_transcripts
+                        else transcript_list._generated_transcripts[0]
+                    )
+            
+            transcript_data = list(transcript_obj.fetch())
+            transcript_text = ' '.join([snippet.text for snippet in transcript_data])
+            return transcript_data, transcript_text
+            
+        except Exception as e:
+            raise Exception(f"{str(e)} (Cookies status: {cookies_status})")
