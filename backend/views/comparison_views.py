@@ -81,9 +81,24 @@ def compare_videos(request):
                     video = YouTubeService.fetch_video_details(video_id, parts="snippet")
 
                     if video:
-                        transcript_data, transcript_text = YouTubeService.fetch_transcript(video_id)
-                        analysis = analyzer.analyze_transcript(transcript_text, transcript_data)
-
+                        title = video['snippet']['title']
+                        description = video['snippet']['description']
+                        channel = video['snippet']['channelTitle']
+                        
+                        has_transcript = False
+                        transcript_text = ""
+                        transcript_data = []
+                        
+                        try:
+                            transcript_data, transcript_text = YouTubeService.fetch_transcript(video_id)
+                            has_transcript = True
+                            analysis = analyzer.analyze_transcript(transcript_text, transcript_data)
+                        except Exception as e:
+                            has_transcript = False
+                            # Fallback to metadata analysis
+                            analysis = analyzer.analyze_metadata(title, description)
+                            analysis['transcript_error'] = str(e)
+                            
                         # Add comments analysis
                         try:
                             comments_analyzer = CommentsAnalyzer(youtube_api_key)
@@ -100,9 +115,9 @@ def compare_videos(request):
                         videos_data.append({
                             'url': url,
                             'video_id': video_id,
-                            'title': video['snippet']['title'],
-                            'description': video['snippet']['description'],
-                            'channel': video['snippet']['channelTitle'],
+                            'title': title,
+                            'description': description,
+                            'channel': channel,
                             'analysis': analysis,
                             'skill_level': analysis['skill_level'],
                             'level_score': analysis['level_score'],
@@ -110,7 +125,9 @@ def compare_videos(request):
                                 len(snippet.text.split())
                                 for snippet in transcript_data
                             ),
-                            'transcript_text': transcript_text
+                            'transcript_text': transcript_text,
+                            'has_transcript': has_transcript,
+                            'transcript_error': analysis.get('transcript_error', '')
                         })
 
                 comparison_results = {

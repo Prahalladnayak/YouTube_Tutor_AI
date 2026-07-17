@@ -272,6 +272,56 @@ class TranscriptAnalyzer:
         
         return results
 
+    def analyze_metadata(self, title, description, duration_minutes=60):
+        """Fallback analysis using only video title, description, and duration when transcript is missing"""
+        results = {}
+        
+        # Combine title and description for text analysis
+        combined_text = f"{title or ''}. {description or ''}"
+        
+        # 0. Detect language
+        language = self.detect_language(combined_text)
+        results['language'] = language
+        
+        # 1. Readability
+        if language == 'en':
+            results['readability'] = self.calculate_readability(combined_text)
+        else:
+            results['readability'] = {
+                'flesch_score': 'N/A',
+                'fk_grade': 'N/A', 
+                'normalized': 50,
+                'interpretation': f'Language: {language.upper()} (analysis limited)'
+            }
+            
+        # 2. Jargon
+        jargon_results = self.analyze_jargon(combined_text)
+        if language != 'en':
+            jargon_results['level'] = f"Language: {language.upper()}"
+        results['jargon'] = jargon_results
+        
+        # 3. Pacing - since we have no transcript, we set standard defaults
+        results['pacing'] = {
+            'words_per_minute': 140,
+            'pacing': 'Standard pacing (estimated)',
+            'is_good': True
+        }
+        
+        # 4. Determine skill level
+        if language == 'hi':
+            level, score, explanation = self.determine_hindi_skill_level(results)
+        else:
+            level, score, explanation = self.determine_skill_level(results)
+            
+        # Append estimated note to description
+        explanation = f"{explanation} (estimated from video metadata)"
+        
+        results['skill_level'] = level
+        results['level_score'] = score
+        results['level_explanation'] = explanation
+        
+        return results
+
 class TopicDetector:
     def __init__(self):
         self.stop_words = set(stopwords.words('english'))

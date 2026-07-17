@@ -80,6 +80,8 @@ class YouTubeService:
         cookies_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'cookies.txt')
         cookies_status = "No cookies.txt found"
         
+        print(f"\n[TRANSCRIPT LOG] Attempting transcript fetch for video ID: {video_id}")
+        
         if os.path.exists(cookies_path):
             cookies_status = "cookies.txt found"
             import requests
@@ -98,13 +100,17 @@ class YouTubeService:
                 session.cookies = cookie_jar
                 api = YouTubeTranscriptApi(http_client=session)
                 cookies_status = "cookies.txt loaded successfully"
+                print("[TRANSCRIPT LOG] Method 1 (youtube-transcript-api) will be called with cookies loaded.")
             except Exception as e:
                 cookies_status = f"Failed to load cookies: {str(e)}"
                 api = YouTubeTranscriptApi()
+                print(f"[TRANSCRIPT LOG] Method 1 (youtube-transcript-api) will be called without cookies. Cookie Error: {e}")
         else:
             api = YouTubeTranscriptApi()
+            print("[TRANSCRIPT LOG] Method 1 (youtube-transcript-api) will be called without cookies. (cookies.txt not present)")
             
         try:
+            print("[TRANSCRIPT LOG] Calling youtube-transcript-api...")
             transcript_list = api.list(video_id)
             
             # Try English first, then Hindi, then any available transcript
@@ -122,15 +128,47 @@ class YouTubeService:
             
             transcript_data = list(transcript_obj.fetch())
             transcript_text = ' '.join([snippet.text for snippet in transcript_data])
+            print(f"[TRANSCRIPT LOG] Method 1 SUCCESS: Retrieved {len(transcript_data)} segments.")
             return transcript_data, transcript_text
             
         except Exception as e:
-            # Fallback to yt-dlp to bypass YouTube's datacenter blocks
-            print(f"⚠️ youtube-transcript-api failed: {e}. Falling back to yt-dlp...")
+            err_msg = str(e)
+            print(f"[TRANSCRIPT LOG] Method 1 FAILED. Error: {err_msg}")
+            
+            # Classify regular scraper error
+            failure_reason = "General YouTube scraping error"
+            if "blocked" in err_msg.lower() or "too many requests" in err_msg.lower() or "429" in err_msg.lower() or "403" in err_msg.lower():
+                failure_reason = "IP address blocked by YouTube (Bot Detection / Datacenter IP blacklist)"
+            elif "not available" in err_msg.lower() or "disabled" in err_msg.lower() or "no transcript" in err_msg.lower():
+                failure_reason = "Captions are disabled or unavailable for this video"
+                
+            print(f"[TRANSCRIPT LOG] Scraper failure reason: {failure_reason}")
+            print("[TRANSCRIPT LOG] Attempting Method 2 (yt-dlp fallback) to bypass cloud IP ban...")
+            
             try:
-                return YouTubeService._fetch_transcript_ytdl(video_id)
+                data, text = YouTubeService._fetch_transcript_ytdl(video_id)
+                print(f"[TRANSCRIPT LOG] Method 2 SUCCESS: yt-dlp fallback retrieved {len(data)} segments.")
+                return data, text
             except Exception as ytdl_err:
-                raise Exception(f"YouTube block detected. Regular fetch failed: {str(e)}. Fallback yt-dlp failed: {str(ytdl_err)} (Cookies status: {cookies_status})")
+                ytdl_msg = str(ytdl_err)
+                print(f"[TRANSCRIPT LOG] Method 2 FAILED. Error: {ytdl_msg}")
+                
+                # Classify fallback scraper error
+                ytdl_reason = "General yt-dlp error"
+                if "confirm you're not a bot" in ytdl_msg.lower() or "sign in" in ytdl_msg.lower() or "captcha" in ytdl_msg.lower():
+                    ytdl_reason = "YouTube bot protection triggered on yt-dlp (Requires browser sign-in / cookies)"
+                elif "no subtitles" in ytdl_msg.lower() or "not find" in ytdl_msg.lower():
+                    ytdl_reason = "No captions are available on YouTube for this video"
+                
+                print(f"[TRANSCRIPT LOG] Fallback failure reason: {ytdl_reason}")
+                
+                full_error_msg = (
+                    f"Could not retrieve transcript. Details:\n"
+                    f"- Method 1 (youtube-transcript-api): {failure_reason} (Error: {err_msg})\n"
+                    f"- Method 2 (yt-dlp): {ytdl_reason} (Error: {ytdl_msg})\n"
+                    f"- Cookies status: {cookies_status}"
+                )
+                raise Exception(full_error_msg)
 
     @staticmethod
     def _fetch_transcript_ytdl(video_id):

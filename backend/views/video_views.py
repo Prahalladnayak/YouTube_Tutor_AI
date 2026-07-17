@@ -115,17 +115,20 @@ def video_analyse_QA(request):
                             video_info['transcript_full'] = transcript_full
                             video_info['transcript_text'] = video_info['transcript_full']
                             
-                            # Analyze the transcript using TranscriptAnalyzer from AI ML layer
-                            try:
-                                analyzer = TranscriptAnalyzer()
-                                analysis_results = analyzer.analyze_transcript(video_info['transcript_full'], transcript_data)
-                                video_info['analysis'] = analysis_results
-                                video_info['skill_level'] = analysis_results['skill_level']
-                            except Exception as e:
-                                video_info['analysis_error'] = str(e)
-                            
                         except Exception as e:
                             video_info['transcript_error'] = str(e)
+                            # Graceful fallback: perform analysis using metadata instead of transcript
+                            try:
+                                analyzer = TranscriptAnalyzer()
+                                analysis_results = analyzer.analyze_metadata(
+                                    video_info['title'],
+                                    video_info['description'],
+                                    video_info['duration_minutes']
+                                )
+                                video_info['analysis'] = analysis_results
+                                video_info['skill_level'] = analysis_results['skill_level']
+                            except Exception as meta_err:
+                                video_info['analysis_error'] = f"Metadata fallback failed: {str(meta_err)}"
                             
                 except Exception as e:
                     ErrorHandler.log_error(e, "YouTube API")
