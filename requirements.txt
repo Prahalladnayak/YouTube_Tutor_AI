@@ -37,3 +37,4 @@ chromadb
 sentence-transformers
 groq
 whitenoise
+yt-dlp

@@ -125,4 +125,122 @@ class YouTubeService:
             return transcript_data, transcript_text
             
         except Exception as e:
-            raise Exception(f"{str(e)} (Cookies status: {cookies_status})")
+            # Fallback to yt-dlp to bypass YouTube's datacenter blocks
+            print(f"⚠️ youtube-transcript-api failed: {e}. Falling back to yt-dlp...")
+            try:
+                return YouTubeService._fetch_transcript_ytdl(video_id)
+            except Exception as ytdl_err:
+                raise Exception(f"YouTube block detected. Regular fetch failed: {str(e)}. Fallback yt-dlp failed: {str(ytdl_err)} (Cookies status: {cookies_status})")
+
+    @staticmethod
+    def _fetch_transcript_ytdl(video_id):
+        """Fallback to fetch transcripts via yt-dlp to bypass YouTube scraper blocks"""
+        import yt_dlp
+        import requests
+        
+        # A mock class to match youtube_transcript_api's FetchedTranscriptSnippet
+        class FetchedTranscriptSnippet:
+            def __init__(self, text, start, duration):
+                self.text = text
+                self.start = start
+                self.duration = duration
+            def __repr__(self):
+                return f"FetchedTranscriptSnippet(text='{self.text}', start={self.start}, duration={self.duration})"
+
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        ydl_opts = {
+            'writeautomaticsub': True,
+            'writesubtitles': True,
+            'skip_download': True,
+            'quiet': True,
+            'no_warnings': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            subtitles = info.get('subtitles', {})
+            auto_subtitles = info.get('automatic_captions', {})
+            
+            target_lang = None
+            subtitle_formats = None
+            
+            # Try English first, then Hindi
+            for lang in ['en', 'hi']:
+                if lang in subtitles:
+                    target_lang = lang
+                    subtitle_formats = subtitles[lang]
+                    break
+                elif lang in auto_subtitles:
+                    target_lang = lang
+                    subtitle_formats = auto_subtitles[lang]
+                    break
+                    
+            # Fallback to first available language if neither is found
+            if not target_lang:
+                if subtitles:
+                    target_lang = list(subtitles.keys())[0]
+                    subtitle_formats = subtitles[target_lang]
+                elif auto_subtitles:
+                    target_lang = list(auto_subtitles.keys())[0]
+                    subtitle_formats = auto_subtitles[target_lang]
+                    
+            if not subtitle_formats:
+                raise Exception("No subtitles found in video metadata")
+                
+            # Prefer JSON3 (clean JSON format), then VTT
+            json3_url = None
+            vtt_url = None
+            for fmt in subtitle_formats:
+                ext = fmt.get('ext')
+                fmt_url = fmt.get('url')
+                if ext == 'json3':
+                    json3_url = fmt_url
+                elif ext == 'vtt':
+                    vtt_url = fmt_url
+                    
+            if json3_url:
+                res = requests.get(json3_url, timeout=10)
+                data = res.json()
+                transcript_data = []
+                for event in data.get('events', []):
+                    if 'segs' in event:
+                        text = ''.join([seg['utf8'] for seg in event['segs'] if 'utf8' in seg]).strip()
+                        if text:
+                            start = event.get('tStartMs', 0) / 1000.0
+                            duration = event.get('dDurationMs', 0) / 1000.0
+                            transcript_data.append(FetchedTranscriptSnippet(text, start, duration))
+                
+                transcript_text = ' '.join([s.text for s in transcript_data])
+                return transcript_data, transcript_text
+                
+            elif vtt_url:
+                res = requests.get(vtt_url, timeout=10)
+                lines = res.text.split('\n')
+                transcript_data = []
+                for i in range(len(lines)):
+                    if '-->' in lines[i]:
+                        time_line = lines[i]
+                        text_line = lines[i+1] if i+1 < len(lines) else ""
+                        import re
+                        text_line = re.sub(r'<[^>]*>', '', text_line).strip()
+                        if not text_line:
+                            continue
+                            
+                        parts = time_line.split('-->')
+                        start_str = parts[0].strip()
+                        t_parts = start_str.split(':')
+                        try:
+                            secs = float(t_parts[-1])
+                            mins = int(t_parts[-2]) if len(t_parts) > 1 else 0
+                            hrs = int(t_parts[-3]) if len(t_parts) > 2 else 0
+                            start = hrs * 3600 + mins * 60 + secs
+                        except:
+                            start = 0.0
+                        
+                        transcript_data.append(FetchedTranscriptSnippet(text_line, start, 2.0))
+                        
+                transcript_text = ' '.join([s.text for s in transcript_data])
+                return transcript_data, transcript_text
+            else:
+                raise Exception("No supported subtitle format found (JSON3 or VTT)")
